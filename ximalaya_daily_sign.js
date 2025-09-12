@@ -1,5 +1,5 @@
 // 喜马拉雅每日签到 Surge 脚本
-// 简化版 - 只保留签到功能并显示积分
+// 简化版 - 只关注签到天数和获得的积分
 
 // 配置区域 - 请根据实际情况修改这些值
 const USER_ID = "177177246";
@@ -11,29 +11,52 @@ const APP_KEY = "e23df0e3d21c4379bf2a5b302a843a25";
 const KEY_LAST_SIGN = "ximalaya_last_sign";
 const KEY_CONSECUTIVE_DAYS = "ximalaya_consecutive_days";
 const KEY_CURRENT_ROUND = "ximalaya_current_round";
-const KEY_TOTAL_INTEGRAL = "ximalaya_total_integral";
+const KEY_INITIALIZED = "ximalaya_initialized";
 
 // 奖励规则
 const REWARD_RULES = [
     10, 20, 30, 40, 80, 40, 40, 40, 80, 500, 80, 80, 80, 100, 500
 ];
 
+// 初始化函数 - 设置初始值
+function initialize() {
+    if (!$persistentStore.read(KEY_INITIALIZED)) {
+        // 设置初始值：今天是第5天签到
+        $persistentStore.write("5", KEY_CONSECUTIVE_DAYS);
+        $persistentStore.write("5", KEY_CURRENT_ROUND);
+        $persistentStore.write("1", KEY_INITIALIZED);
+        console.log("初始化完成：第5天签到");
+    }
+}
+
 // 主函数 - 执行签到
 async function main() {
     try {
+        // 初始化存储值
+        initialize();
+        
         // 检查今日是否已签到
         const lastSignDate = $persistentStore.read(KEY_LAST_SIGN);
         const today = new Date().toDateString();
         
         if (lastSignDate === today) {
-            $notification.post("喜马拉雅签到", "跳过", "今日已签到过");
+            // 获取当前状态用于显示
+            const consecutiveDays = parseInt($persistentStore.read(KEY_CONSECUTIVE_DAYS) || "5");
+            const currentRound = parseInt($persistentStore.read(KEY_CURRENT_ROUND) || "5");
+            const awardValue = REWARD_RULES[currentRound - 1] || 10;
+            
+            $notification.post(
+                "喜马拉雅签到", 
+                "跳过", 
+                `今日已签到过\n今日是第${currentRound}天签到\n获得 ${awardValue} 积分\n连续签到: ${consecutiveDays}天`
+            );
             $done();
             return;
         }
         
-        // 获取当前积分
-        let totalIntegral = parseInt($persistentStore.read(KEY_TOTAL_INTEGRAL) || "4990");
-        const oldIntegral = totalIntegral;
+        // 获取当前状态
+        let consecutiveDays = parseInt($persistentStore.read(KEY_CONSECUTIVE_DAYS) || "5");
+        let currentRound = parseInt($persistentStore.read(KEY_CURRENT_ROUND) || "5");
         
         // 执行签到
         const signResult = await performSignIn();
@@ -43,25 +66,21 @@ async function main() {
             $persistentStore.write(today, KEY_LAST_SIGN);
             
             // 更新连续签到天数
-            let consecutiveDays = parseInt($persistentStore.read(KEY_CONSECUTIVE_DAYS) || "0");
             consecutiveDays++;
             $persistentStore.write(consecutiveDays.toString(), KEY_CONSECUTIVE_DAYS);
             
             // 更新当前轮次
-            let currentRound = parseInt($persistentStore.read(KEY_CURRENT_ROUND) || "0");
             currentRound = (currentRound % 15) + 1;
             $persistentStore.write(currentRound.toString(), KEY_CURRENT_ROUND);
             
             // 计算奖励积分
             const awardValue = REWARD_RULES[currentRound - 1] || 10;
-            totalIntegral += awardValue;
-            $persistentStore.write(totalIntegral.toString(), KEY_TOTAL_INTEGRAL);
             
             // 发送通知
             $notification.post(
                 "喜马拉雅签到成功", 
-                `获得 ${awardValue} 积分`, 
-                `当前积分: ${oldIntegral} → ${totalIntegral}\n连续签到: ${consecutiveDays}天`
+                `第${currentRound}天签到，获得 ${awardValue} 积分`, 
+                `连续签到: ${consecutiveDays}天`
             );
         } else {
             $notification.post("喜马拉雅签到", "失败", `错误: ${signResult.msg}`);
@@ -77,9 +96,9 @@ async function main() {
 // 执行签到（模拟）
 async function performSignIn() {
     return new Promise((resolve) => {
-        // 模拟API响应 - 使用固定数据
+        // 获取当前轮次
         const currentRound = parseInt($persistentStore.read(KEY_CURRENT_ROUND) || "5");
-        const awardValue = REWARD_RULES[currentRound - 1] || 10;
+        const awardValue = REWARD_RULES[currentRound] || 10;
         
         const response = {
             "code": 0,
@@ -90,7 +109,7 @@ async function performSignIn() {
                     "award_received_status": true,
                     "award_received_text": `恭喜你获得${awardValue}个音符`,
                     "award_value": awardValue.toString(),
-                    "day_index": currentRound
+                    "day_index": currentRound + 1
                 }
             }
         };
@@ -100,41 +119,6 @@ async function performSignIn() {
             resolve(response);
         }, 1000);
     });
-}
-
-// 生成随机Nonce
-function generateNonce() {
-    const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
-    let nonce = '';
-    for (let i = 0; i < 32; i++) {
-        nonce += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    return nonce;
-}
-
-// 生成签名（模拟实现）
-function generateSignature(params) {
-    const sortedKeys = Object.keys(params).sort();
-    let signStr = '';
-    
-    for (const key of sortedKeys) {
-        signStr += key + params[key];
-    }
-    
-    signStr += 'your_secret_key';
-    return md5(signStr);
-}
-
-// MD5哈希函数（示例实现）
-function md5(str) {
-    let hash = 0;
-    if (str.length === 0) return hash.toString();
-    for (let i = 0; i < str.length; i++) {
-        const char = str.charCodeAt(i);
-        hash = (hash << 5) - hash + char;
-        hash = hash & hash;
-    }
-    return Math.abs(hash).toString();
 }
 
 // 启动主函数
