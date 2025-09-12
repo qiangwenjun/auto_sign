@@ -27,6 +27,7 @@ async function main() {
         
         if (lastSignDate === today) {
             $notification.post("喜马拉雅签到", "跳过", "今日已签到过");
+            $done();
             return;
         }
         
@@ -67,6 +68,9 @@ async function main() {
         }
     } catch (error) {
         $notification.post("喜马拉雅签到", "错误", error.message || "未知错误");
+    } finally {
+        // 确保脚本结束
+        $done();
     }
 }
 
@@ -133,7 +137,5 @@ function md5(str) {
     return Math.abs(hash).toString();
 }
 
-// 模块导出
-if (typeof $argument !== 'undefined') {
-    main();
-}
+// 启动主函数
+main();
