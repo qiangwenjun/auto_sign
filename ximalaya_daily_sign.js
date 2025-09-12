@@ -1,5 +1,5 @@
 // 喜马拉雅每日签到 Surge 脚本
-// 简化版 - 只关注签到天数和获得的积分
+// 修正版 - 确保所有路径都调用 $done()
 
 // 配置区域 - 请根据实际情况修改这些值
 const USER_ID = "177177246";
@@ -87,10 +87,10 @@ async function main() {
         }
     } catch (error) {
         $notification.post("喜马拉雅签到", "错误", error.message || "未知错误");
-    } finally {
-        // 确保脚本结束
-        $done();
     }
+    
+    // 确保脚本结束
+    $done();
 }
 
 // 执行签到（模拟）
